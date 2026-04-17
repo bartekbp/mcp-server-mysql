@@ -1,5 +1,14 @@
 import { ChildProcess } from "child_process";
 import * as net from "net";
+import * as os from "os";
+import * as path from "path";
+
+function expandHome(p: string): string {
+  if (p.startsWith("~/") || p === "~") {
+    return path.join(os.homedir(), p.slice(1));
+  }
+  return p;
+}
 
 export async function pickFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -25,6 +34,24 @@ export interface TunnelConfig {
   sshKey?: string;
   remoteHost: string;
   remotePort: number;
+}
+
+export function buildSshArgv(cfg: TunnelConfig, localPort: number): string[] {
+  const argv: string[] = [
+    "-N",
+    "-T",
+    "-o", "ExitOnForwardFailure=yes",
+    "-o", "ServerAliveInterval=30",
+    "-o", "ServerAliveCountMax=3",
+    "-o", "BatchMode=yes",
+    "-o", "StrictHostKeyChecking=accept-new",
+    "-L", `${localPort}:${cfg.remoteHost}:${cfg.remotePort}`,
+  ];
+  if (cfg.sshUser) argv.push("-l", cfg.sshUser);
+  if (cfg.sshPort !== undefined) argv.push("-p", String(cfg.sshPort));
+  if (cfg.sshKey) argv.push("-i", expandHome(cfg.sshKey));
+  argv.push(cfg.sshHost);
+  return argv;
 }
 
 export interface TunnelOptions {
