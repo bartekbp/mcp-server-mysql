@@ -375,14 +375,20 @@ export default function createMcpServer({
   const shutdown = async (signal: string): Promise<void> => {
     log("error", `Received ${signal}. Shutting down...`);
     try {
-      // Only attempt to close the pool if it was created
       if (poolPromise) {
         const pool = await poolPromise;
         await pool.end();
       }
     } catch (err) {
       log("error", "Error closing pool:", err);
-      throw err;
+    }
+    try {
+      if (activeTunnel) {
+        await activeTunnel.close();
+        activeTunnel = undefined;
+      }
+    } catch (err) {
+      log("error", "Error closing SSH tunnel:", err);
     }
   };
 
