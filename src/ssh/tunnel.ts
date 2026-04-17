@@ -2,6 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 import * as net from "net";
 import * as os from "os";
 import * as path from "path";
+import * as fs from "fs";
 import { log } from "../utils/index.js";
 
 const DEFAULT_READINESS_TIMEOUT_MS = 10_000;
@@ -115,6 +116,13 @@ export async function startTunnel(
   const spawnPath = opts.spawnPath ?? "ssh";
   const readinessTimeoutMs = opts.readinessTimeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS;
   const pollMs = opts.readinessPollIntervalMs ?? DEFAULT_READINESS_POLL_MS;
+
+  if (cfg.sshKey) {
+    const expanded = expandHome(cfg.sshKey);
+    if (!fs.existsSync(expanded)) {
+      throw new Error(`SSH key not found: ${cfg.sshKey}`);
+    }
+  }
 
   const localPort = await pickFreePort();
   const argv = buildSshArgv(cfg, localPort);

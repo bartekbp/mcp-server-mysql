@@ -139,3 +139,19 @@ describe("startTunnel (happy path)", () => {
     }
   });
 });
+
+describe("startTunnel (key pre-flight)", () => {
+  it("rejects with a clear error when sshKey path does not exist", async () => {
+    await expect(
+      startTunnel(
+        {
+          sshHost: "fake-bastion",
+          remoteHost: "fake-db",
+          remotePort: 3306,
+          sshKey: "/does/not/exist/key.pem",
+        },
+        { spawnPath: FIXTURE_OK },
+      ),
+    ).rejects.toThrow(/SSH key not found/);
+  });
+});
