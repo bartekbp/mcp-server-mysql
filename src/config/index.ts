@@ -178,3 +178,45 @@ export const mcpConfig = {
 };
 
 export { readCACertificate, readSSLFile };
+
+export interface SshTunnelConfig {
+  sshHost: string;
+  sshUser?: string;
+  sshPort?: number;
+  sshKey?: string;
+  remoteHost: string;
+  remotePort: number;
+}
+
+export function getSshTunnelConfig(): SshTunnelConfig | undefined {
+  const sshHost = process.env.SSH_HOST?.trim();
+  if (!sshHost) return undefined;
+
+  const socketPath =
+    connectionStringConfig.socketPath || process.env.MYSQL_SOCKET_PATH;
+  if (socketPath) {
+    console.info(
+      "[ssh] SSH_HOST is set but MYSQL_SOCKET_PATH takes precedence; SSH tunnel will not be started.",
+    );
+    return undefined;
+  }
+
+  const remoteHost =
+    connectionStringConfig.host || process.env.MYSQL_HOST || "127.0.0.1";
+  const remotePort =
+    connectionStringConfig.port || Number(process.env.MYSQL_PORT || "3306");
+
+  const cfg: SshTunnelConfig = { sshHost, remoteHost, remotePort };
+
+  if (process.env.SSH_USER) cfg.sshUser = process.env.SSH_USER;
+  if (process.env.SSH_PORT) {
+    const parsed = Number(process.env.SSH_PORT);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) {
+      throw new Error(`Invalid SSH_PORT: ${process.env.SSH_PORT}`);
+    }
+    cfg.sshPort = parsed;
+  }
+  if (process.env.SSH_KEY) cfg.sshKey = process.env.SSH_KEY;
+
+  return cfg;
+}
