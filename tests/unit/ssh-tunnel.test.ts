@@ -155,3 +155,16 @@ describe("startTunnel (key pre-flight)", () => {
     ).rejects.toThrow(/SSH key not found/);
   });
 });
+
+const FIXTURE_CRASH = path.resolve(__dirname, "../fixtures/ssh/fake-ssh-crash.sh");
+
+describe("startTunnel (ssh exits before ready)", () => {
+  it("rejects with a message containing the stderr tail", async () => {
+    await expect(
+      startTunnel(
+        { sshHost: "fake-bastion", remoteHost: "fake-db", remotePort: 3306 },
+        { spawnPath: FIXTURE_CRASH, readinessTimeoutMs: 3000 },
+      ),
+    ).rejects.toThrow(/Permission denied/);
+  });
+});
