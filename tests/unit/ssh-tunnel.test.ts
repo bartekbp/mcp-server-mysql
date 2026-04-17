@@ -226,3 +226,29 @@ describe("ActiveTunnel.close (SIGKILL fallback)", () => {
     expect(elapsed).toBeLessThan(2000);
   });
 });
+
+describe("runtime exit callback", () => {
+  it("invokes onRuntimeExit when ssh dies after readiness", async () => {
+    const events: Array<{ code: number | null; tail: string }> = [];
+    const tunnel = await startTunnel(
+      { sshHost: "fake-bastion", remoteHost: "fake-db", remotePort: 3306 },
+      {
+        spawnPath: FIXTURE_OK,
+        readinessTimeoutMs: 3000,
+        onRuntimeExit: (code, tail) => { events.push({ code, tail }); },
+      },
+    );
+    const pid = await pidBoundTo(tunnel.localPort);
+    process.kill(pid, "SIGKILL");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(events.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+async function pidBoundTo(port: number): Promise<number> {
+  const { execSync } = await import("child_process");
+  const out = execSync(`lsof -t -iTCP:${port} -sTCP:LISTEN`).toString().trim();
+  const pid = Number(out.split(/\s+/)[0]);
+  if (!Number.isFinite(pid)) throw new Error(`no pid on port ${port}`);
+  return pid;
+}
