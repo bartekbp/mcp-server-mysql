@@ -115,6 +115,10 @@ describe("Query Functions", () => {
             type: "text",
             text: JSON.stringify(mockResults, null, 2),
           },
+          {
+            type: "text",
+            text: expect.stringMatching(/^Query execution time: [\d.]+ ms$/),
+          },
         ],
         isError: false,
       });
