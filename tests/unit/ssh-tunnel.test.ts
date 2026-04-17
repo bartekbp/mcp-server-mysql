@@ -185,3 +185,21 @@ describe("startTunnel (readiness timeout)", () => {
     ).rejects.toThrow(/timeout/i);
   });
 });
+
+describe("ActiveTunnel.close (SIGTERM path)", () => {
+  it("terminates the child process gracefully", async () => {
+    const tunnel = await startTunnel(
+      { sshHost: "fake-bastion", remoteHost: "fake-db", remotePort: 3306 },
+      { spawnPath: FIXTURE_OK, readinessTimeoutMs: 3000 },
+    );
+    const port = tunnel.localPort;
+    await tunnel.close();
+
+    const connectable = await new Promise<boolean>((resolve) => {
+      const s = net.createConnection({ host: "127.0.0.1", port });
+      s.once("connect", () => { s.destroy(); resolve(true); });
+      s.once("error", () => { resolve(false); });
+    });
+    expect(connectable).toBe(false);
+  });
+});
