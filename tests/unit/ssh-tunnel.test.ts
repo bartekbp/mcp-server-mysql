@@ -203,3 +203,26 @@ describe("ActiveTunnel.close (SIGTERM path)", () => {
     expect(connectable).toBe(false);
   });
 });
+
+const FIXTURE_IGNORE_SIGTERM = path.resolve(
+  __dirname,
+  "../fixtures/ssh/fake-ssh-ignore-sigterm.sh",
+);
+
+describe("ActiveTunnel.close (SIGKILL fallback)", () => {
+  it("escalates to SIGKILL when SIGTERM is ignored", async () => {
+    const tunnel = await startTunnel(
+      { sshHost: "fake-bastion", remoteHost: "fake-db", remotePort: 3306 },
+      {
+        spawnPath: FIXTURE_IGNORE_SIGTERM,
+        readinessTimeoutMs: 3000,
+        shutdownGraceMs: 200,
+      },
+    );
+    const start = Date.now();
+    await tunnel.close();
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(150);
+    expect(elapsed).toBeLessThan(2000);
+  });
+});
