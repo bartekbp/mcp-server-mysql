@@ -22,11 +22,13 @@ import {
   SCHEMA_INSERT_PERMISSIONS,
   SCHEMA_UPDATE_PERMISSIONS,
   isMultiDbMode,
+  mcpConfig,
   mcpConfig as config,
   MCP_VERSION as version,
   IS_REMOTE_MCP,
   REMOTE_SECRET_KEY,
   PORT,
+  getSshTunnelConfig,
 } from "./src/config/index.js";
 import {
   safeExit,
@@ -35,6 +37,7 @@ import {
   executeReadOnlyQuery,
   poolPromise,
 } from "./src/db/index.js";
+import { startTunnel, ActiveTunnel } from "./src/ssh/tunnel.js";
 
 import express, { Request, Response } from "express";
 import { fileURLToPath } from 'url';
@@ -344,11 +347,20 @@ export default function createMcpServer({
     return toolsResponse;
   });
 
-  // Initialize database connection and set up shutdown handlers
+  let activeTunnel: ActiveTunnel | undefined;
+
+  // Initialize SSH tunnel (if configured) and test the database connection.
   (async () => {
     try {
+      const sshCfg = getSshTunnelConfig();
+      if (sshCfg) {
+        log("info", `Starting SSH tunnel via ${sshCfg.sshHost} -> ${sshCfg.remoteHost}:${sshCfg.remotePort}...`);
+        activeTunnel = await startTunnel(sshCfg);
+        log("info", `SSH tunnel ready on 127.0.0.1:${activeTunnel.localPort}`);
+        (mcpConfig.mysql as { host?: string; port?: number }).host = "127.0.0.1";
+        (mcpConfig.mysql as { host?: string; port?: number }).port = activeTunnel.localPort;
+      }
       log("info", "Attempting to test database connection...");
-      // Test the connection before fully starting the server
       const pool = await getPool();
       const connection = await pool.getConnection();
       log("info", "Database connection test successful");
