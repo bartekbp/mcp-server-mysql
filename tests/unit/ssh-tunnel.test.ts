@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import * as net from "net";
-import { pickFreePort, buildSshArgv, waitForTcpReady } from "../../src/ssh/tunnel.js";
+import * as path from "path";
+import { fileURLToPath } from "url";
+import { pickFreePort, buildSshArgv, waitForTcpReady, startTunnel } from "../../src/ssh/tunnel.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURE_OK = path.resolve(__dirname, "../fixtures/ssh/fake-ssh-ok.sh");
 
 describe("pickFreePort", () => {
   it("returns a usable TCP port in the high range", async () => {
@@ -105,5 +110,32 @@ describe("waitForTcpReady", () => {
     await expect(
       waitForTcpReady(port, { timeoutMs: 200, intervalMs: 50 }),
     ).rejects.toThrow(/timeout/i);
+  });
+});
+
+describe("startTunnel (happy path)", () => {
+  it("spawns the fake ssh, waits for readiness, and returns ActiveTunnel", async () => {
+    const tunnel = await startTunnel(
+      {
+        sshHost: "fake-bastion",
+        remoteHost: "fake-db",
+        remotePort: 3306,
+      },
+      {
+        spawnPath: FIXTURE_OK,
+        readinessTimeoutMs: 3000,
+        readinessPollIntervalMs: 50,
+      },
+    );
+    try {
+      expect(tunnel.localPort).toBeGreaterThan(1024);
+      await new Promise<void>((resolve, reject) => {
+        const s = net.createConnection({ host: "127.0.0.1", port: tunnel.localPort });
+        s.once("connect", () => { s.destroy(); resolve(); });
+        s.once("error", reject);
+      });
+    } finally {
+      await tunnel.close();
+    }
   });
 });
