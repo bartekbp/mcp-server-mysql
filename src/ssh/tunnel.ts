@@ -36,6 +36,41 @@ export interface TunnelConfig {
   remotePort: number;
 }
 
+export interface WaitForTcpOptions {
+  timeoutMs: number;
+  intervalMs: number;
+}
+
+export async function waitForTcpReady(
+  port: number,
+  opts: WaitForTcpOptions,
+): Promise<void> {
+  const deadline = Date.now() + opts.timeoutMs;
+  while (Date.now() < deadline) {
+    const ok = await tryConnect(port);
+    if (ok) return;
+    await sleep(opts.intervalMs);
+  }
+  throw new Error(`TCP readiness timeout: 127.0.0.1:${port} did not accept within ${opts.timeoutMs}ms`);
+}
+
+function tryConnect(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port });
+    const done = (ok: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function buildSshArgv(cfg: TunnelConfig, localPort: number): string[] {
   const argv: string[] = [
     "-N",
