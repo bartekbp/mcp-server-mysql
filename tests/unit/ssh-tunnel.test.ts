@@ -168,3 +168,20 @@ describe("startTunnel (ssh exits before ready)", () => {
     ).rejects.toThrow(/Permission denied/);
   });
 });
+
+const FIXTURE_HANG = path.resolve(__dirname, "../fixtures/ssh/fake-ssh-hang.sh");
+
+describe("startTunnel (readiness timeout)", () => {
+  it("rejects with a timeout error when ssh never binds", async () => {
+    await expect(
+      startTunnel(
+        { sshHost: "fake-bastion", remoteHost: "fake-db", remotePort: 3306 },
+        {
+          spawnPath: FIXTURE_HANG,
+          readinessTimeoutMs: 300,
+          readinessPollIntervalMs: 50,
+        },
+      ),
+    ).rejects.toThrow(/timeout/i);
+  });
+});
