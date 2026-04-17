@@ -22,13 +22,11 @@ import {
   SCHEMA_INSERT_PERMISSIONS,
   SCHEMA_UPDATE_PERMISSIONS,
   isMultiDbMode,
-  mcpConfig,
   mcpConfig as config,
   MCP_VERSION as version,
   IS_REMOTE_MCP,
   REMOTE_SECRET_KEY,
   PORT,
-  getSshTunnelConfig,
 } from "./src/config/index.js";
 import {
   safeExit,
@@ -37,7 +35,8 @@ import {
   executeReadOnlyQuery,
   poolPromise,
 } from "./src/db/index.js";
-import { startTunnel, ActiveTunnel } from "./src/ssh/tunnel.js";
+import { ActiveTunnel } from "./src/ssh/tunnel.js";
+import { setupSshTunnelIfConfigured } from "./src/ssh/startup.js";
 
 import express, { Request, Response } from "express";
 import { fileURLToPath } from 'url';
@@ -349,26 +348,17 @@ export default function createMcpServer({
 
   let activeTunnel: ActiveTunnel | undefined;
 
-  // Initialize SSH tunnel (if configured) and test the database connection.
-  (async () => {
-    try {
-      const sshCfg = getSshTunnelConfig();
-      if (sshCfg) {
-        log("info", `Starting SSH tunnel via ${sshCfg.sshHost} -> ${sshCfg.remoteHost}:${sshCfg.remotePort}...`);
-        activeTunnel = await startTunnel(sshCfg);
-        log("info", `SSH tunnel ready on 127.0.0.1:${activeTunnel.localPort}`);
-        (mcpConfig.mysql as { host?: string; port?: number }).host = "127.0.0.1";
-        (mcpConfig.mysql as { host?: string; port?: number }).port = activeTunnel.localPort;
-      }
-      log("info", "Attempting to test database connection...");
-      const pool = await getPool();
-      const connection = await pool.getConnection();
-      log("info", "Database connection test successful");
-      connection.release();
-    } catch (error) {
-      log("error", "Fatal error during server startup:", error);
-      safeExit(1);
-    }
+  // Initialize SSH tunnel (if configured) and prime the database pool. Callers
+  // MUST await `server.ready` before connecting a transport — otherwise request
+  // handlers can fire while the tunnel is still being set up, causing the pool
+  // to be created with the pre-tunnel config and bypass forwarding entirely.
+  const ready = (async () => {
+    activeTunnel = await setupSshTunnelIfConfigured();
+    log("info", "Attempting to test database connection...");
+    const pool = await getPool();
+    const connection = await pool.getConnection();
+    log("info", "Database connection test successful");
+    connection.release();
   })();
 
   // Setup shutdown handlers
@@ -423,7 +413,7 @@ export default function createMcpServer({
     safeExit(1);
   });
 
-  return server;
+  return Object.assign(server, { ready });
 }
 
 /**
@@ -461,6 +451,10 @@ if (isMainModule()) {
   (async () => {
     try {
       const mcpServer = createMcpServer({ config: { debug: false } });
+      // Wait for SSH tunnel setup and database pool priming to complete before
+      // accepting any client requests. Otherwise the pool can be created with
+      // pre-tunnel config and bypass forwarding.
+      await mcpServer.ready;
       if (IS_REMOTE_MCP && REMOTE_SECRET_KEY?.length) {
         const app = express();
         app.use(express.json());
