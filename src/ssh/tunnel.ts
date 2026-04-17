@@ -1,4 +1,22 @@
 import { ChildProcess } from "child_process";
+import * as net from "net";
+
+export async function pickFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (addr && typeof addr === "object") {
+        const port = addr.port;
+        server.close(() => resolve(port));
+      } else {
+        server.close(() => reject(new Error("failed to read port")));
+      }
+    });
+  });
+}
 
 export interface TunnelConfig {
   sshHost: string;
