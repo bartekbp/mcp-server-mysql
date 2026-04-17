@@ -98,7 +98,7 @@ export async function startTunnel(
    - Read config.
    - If `sshTunnelConfig` present (and no `MYSQL_SOCKET_PATH`): `const tunnel = await startTunnel(sshTunnelConfig)`.
    - Override the mysql pool's `host` → `127.0.0.1`, `port` → `tunnel.localPort` **before** the first `getPool()` call.
-   - Register `tunnel.close()` in the existing `shutdown()` handler, invoked **before** `pool.end()`.
+   - Register `tunnel.close()` in the existing `shutdown()` handler, invoked **after** `pool.end()`.
 3. **`src/db/index.ts`** is untouched — it reads pool config as it does today.
 
 ### Local port selection
@@ -144,7 +144,7 @@ ssh
 
 ### Shutdown
 
-- `shutdown(signal)` in `index.ts` (already exists at lines 363-375) is extended to `await tunnel?.close()` before `pool.end()`.
+- `shutdown(signal)` in `index.ts` (already exists at lines 363-375) is extended to call `await tunnel?.close()` **after** `pool.end()` — the pool closes first so MySQL connections issue a clean `COM_QUIT` through the still-live tunnel, then the tunnel is torn down.
 - `tunnel.close()`:
   - Removes the permanent `exit` listener (so closing the tunnel does not trigger `safeExit`).
   - Sends `SIGTERM` to the ssh child.
