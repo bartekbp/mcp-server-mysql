@@ -562,6 +562,25 @@ When `MYSQL_CONNECTION_STRING` is provided, it takes precedence over individual 
 - `SCHEMA_DDL_PERMISSIONS`: Schema-specific DDL permissions
 - `MULTI_DB_WRITE_MODE`: Enable write operations in multi-DB mode (default: "false")
 
+### SSH Tunnel (optional)
+
+The server can establish an SSH port-forward at startup and route MySQL traffic through it. This is useful for databases behind a bastion (e.g. AWS RDS in a private VPC). The tunnel is opened before the first database query and closed at shutdown.
+
+Set `SSH_HOST` to enable. The local port is auto-generated; the MCP server rewrites `MYSQL_HOST` and `MYSQL_PORT` internally — **do not** change your MySQL env vars to point at `127.0.0.1`.
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SSH_HOST` | Bastion hostname, IP, or `~/.ssh/config` Host alias. Presence enables the tunnel. | — |
+| `SSH_USER` | SSH user. Passed as `-l <user>`. | Resolved from `~/.ssh/config` or current user |
+| `SSH_PORT` | SSH port. Passed as `-p <port>`. | Resolved from `~/.ssh/config`, usually 22 |
+| `SSH_KEY` | Path to the private key. Passed as `-i <path>`. Supports `~` expansion. | Resolved from `~/.ssh/config` / agent |
+
+Requirements: the system `ssh` binary must be on PATH (ships with macOS and most Linux distros). `BatchMode=yes` is used, so interactive password or passphrase prompts are disabled — use an agent or a passphrase-less key for automation.
+
+If both `SSH_HOST` and `MYSQL_SOCKET_PATH` are set, the Unix socket takes precedence and the tunnel is ignored (with a log line). If the `ssh` process exits unexpectedly at runtime, the MCP server exits and lets the MCP client relaunch it — there is no auto-reconnect.
+
+For an interactive / non-MCP workflow, the `scripts/start-tunnel-rds.sh` and `scripts/stop-tunnel-rds.sh` scripts remain available.
+
 ### Timezone and Date Configuration
 
 - `MYSQL_TIMEZONE`: Set the timezone for date/time values. Accepts formats like `+08:00` (UTC+8), `-05:00` (UTC-5), `Z` (UTC), or `local` (system timezone). Useful for ensuring consistent date/time handling across different server locations.
